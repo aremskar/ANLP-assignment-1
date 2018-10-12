@@ -22,11 +22,29 @@ print(preprocess_line('¿Sería apropiado que usted, Señora Presidenta, escribi
 
 def calculate_mle_prob(tri_counts, bi_counts):
     mle_probs = {}
+    H_ml = 0
     for key in tri_counts.keys():
         history = key[0:2]
         history_count = bi_counts[history]
         mle_probs[key] = tri_counts[key] / history_count
-    return mle_probs
+        H_ml -= log(mle_probs[key],2)
+    H_avg = H_ml / len(tri_counts)
+    pp_ml = np.power(2, H_avg)
+    return mle_probs, pp_ml
+
+def calculate_add_alpha_prob(tri_counts, bi_counts):
+    add_alpha_probs = {}
+    alpha = 0.5
+    H_add_alpha = 0
+    print('alpha is {}'.format(alpha))
+    for key in tri_counts.keys():
+        history = key[0:2]
+        history_count = bi_counts[history]
+        add_alpha_probs[key] = (tri_counts[key] + alpha)  / (history_count + alpha*30)
+        H_add_alpha -= log(add_alpha_probs[key], 2)
+    H_avg = H_add_alpha / len(tri_counts)
+    pp_add_alpha = np.power(2, H_avg)
+    return add_alpha_probs, pp_add_alpha
 
 def generate_from_LM(distribution):
     random_sequence = "#"

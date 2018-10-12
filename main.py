@@ -4,7 +4,7 @@ import sys
 from random import random
 from math import log
 from collections import defaultdict
-import numpy
+import numpy as np
 
 tri_counts=defaultdict(int) #counts of all trigrams in input
 bi_counts=defaultdict(int) #counts of all bigrams in input
@@ -18,15 +18,45 @@ def preprocess_line(line):
     line = '##' + line + '#'
     return line
 
-print(preprocess_line('¿Sería apropiado que usted, Señora Presidenta, escribiese una carta'))
+def all_trigrams():
+    trigrams = {}
+    letters = [' ','#','.','0','a','b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+    for l1 in letters:
+        for l2 in letters:
+            for l3 in letters:
+                trigrams[l1+l2+l3]=0
+    return trigrams
 
 def calculate_mle_prob(tri_counts, bi_counts):
-    mle_probs = {}
+    mle_probs = all_trigrams()
     for key in tri_counts.keys():
         history = key[0:2]
         history_count = bi_counts[history]
         mle_probs[key] = tri_counts[key] / history_count
+    print(mle_probs)
     return mle_probs
+
+def optimize_alpha(model, val_data):
+# only calculates perplexity on val data using add_alpha_prob from training data
+    H_add_alpha = 0
+    for i in range(len(val_data) - 2):
+        trigram = val_data[i:i+3]
+        H_add_alpha = H_add_alpha - log(model[trigram], 2)
+    H_avg = H_add_alpha / (len(val_data)-2)
+    perplexity = np.power(2, H_avg)
+    return perplexity
+
+
+def calculate_add_alpha_prob(tri_counts, bi_counts, alpha):
+    add_alpha_probs = all_trigrams()
+    for key in add_alpha_probs:
+        history = key[0:2]
+        history_count = bi_counts[history]
+        if key in tri_counts.keys():
+            add_alpha_probs[key] = (tri_counts[key] + alpha)  / (history_count + alpha*30)      # add alpha smoothing
+        else:
+            add_alpha_probs[key] = alpha / (history_count + alpha*30)
+    return add_alpha_probs
 
 def generate_from_LM(distribution):
     random_sequence = "#"
@@ -55,7 +85,7 @@ def append_char(bigram, distribution):
             probs.append(distribution[key])
     #print(possible_chars)
     normalized_probs = normalize_probs(probs)
-    random_list = numpy.random.choice(possible_chars, size=None, replace=True, p=normalized_probs)
+    random_list = np.random.choice(possible_chars, size=None, replace=True, p=normalized_probs)
     #print(random_list)
     random_char = random_list[0]
     return random_char
@@ -90,23 +120,10 @@ with open(infile) as f:
         line = preprocess_line(line)
         #print(line)
         for j in range(len(line)-(2)):
-            # if j == 0:
-            #     trigram = '#'+line[j:j+2]
-            #     bigram = '#' + line[j:j+1]
-            #     tri_counts[trigram] += 1
-            #     bi_counts[bigram] += 1
-
             trigram = line[j:j+3]
             bigram = line[j:j+2]
             tri_counts[trigram] += 1
             bi_counts[bigram] += 1
-
-            # if j == len(line)-3:
-            #     trigram = line[j+1:j+3] + '#'
-            #     tri_counts[trigram] += 1
-            #     bigram = line[j+1:j+3]
-            #     bi_counts[bigram] += 1
-
 
 #Some example code that prints out the counts. For small input files
 #the counts are easy to look at but for larger files you can redirect
@@ -118,11 +135,24 @@ print("Trigram counts in ", infile, ", sorted numerically:")
 for tri_count in sorted(tri_counts.items(), key=lambda x:x[1], reverse = True):
     print(tri_count[0], ": ", str(tri_count[1]))
 
+with open("val_en.rtf") as f:
+    val_string = f.read()
+    val_string = preprocess_line(val_string)
 
-# mle_probs = calculate_mle_prob(tri_counts, bi_counts)
-# print(generate_from_LM(mle_probs))
-# br_en_dist = get_br_en_distribution()
-# print(generate_from_LM(br_en_dist))
-br_en_distribution = get_br_en_distribution()
-print(generate_from_LM(br_en_distribution))
-print(generate_from_LM(calculate_mle_prob(tri_counts, bi_counts)))
+alpha_perplexity = {}
+#alpha_perplexity[0] = optimize_alpha(calculate_mle_prob(tri_counts,bi_counts), val_string)
+for i in range(1,20):
+    alpha = i * 0.05
+    model = calculate_add_alpha_prob(tri_counts,bi_counts,alpha)
+    perplexity = optimize_alpha(model, val_string)
+    alpha_perplexity[alpha] = perplexity
+print(alpha_perplexity)
+
+# some code to find min value in alpha_perp
+best_alpha = 0.15
+
+print(generate_from_LM(calculate_add_alpha_prob(tri_counts,bi_counts,best_alpha)))
+print(generate_from_LM(get_br_en_distribution()))
+
+
+# run this on test file
